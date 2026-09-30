@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: lab
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hotel-view-sink
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hotel-view-sink
+  template:
+    metadata:
+      labels:
+        app: hotel-view-sink
+    spec:
+      containers:
+        - name: sink
+          image: hotel-stream-lab:0.1
+          imagePullPolicy: IfNotPresent
+          command: ["python", "sink.py"]
+          env:
+            - name: KAFKA_BOOTSTRAP
+              value: hotel-kafka-kafka-bootstrap.kafka.svc.cluster.local:9092
+            - name: KAFKA_TOPIC
+              value: hotel-price-updates
+            - name: KAFKA_GROUP_ID
+              value: hotel-view-sink
+            - name: REDIS_HOST
+              value: redis.lab.svc.cluster.local
+            - name: REDIS_PORT
+              value: "6379"
+            - name: PROCESSING_DELAY
+              value: "0.02"
+          ports:
+            - name: metrics
+              containerPort: 8000
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hotel-view-api
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hotel-view-api
+  template:
+    metadata:
+      labels:
+        app: hotel-view-api
+    spec:
+      containers:
+        - name: api
+          image: hotel-stream-lab:0.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - uvicorn
+            - api:app
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8080"
+          env:
+            - name: REDIS_HOST
+              value: redis.lab.svc.cluster.local
+            - name: REDIS_PORT
+              value: "6379"
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hotel-view-api
+  namespace: lab
+spec:
+  selector:
+    app: hotel-view-api
+  ports:
+    - port: 8080
+      targetPort: 8080

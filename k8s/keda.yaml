@@ -1,0 +1,29 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: hotel-view-sink
+  namespace: lab
+spec:
+  scaleTargetRef:
+    name: hotel-view-sink
+
+  pollingInterval: 5
+  cooldownPeriod: 30
+
+  minReplicaCount: 0
+  maxReplicaCount: 3
+
+  fallback:
+    failureThreshold: 3
+    replicas: 1
+
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: hotel-kafka-kafka-bootstrap.kafka.svc.cluster.local:9092
+        consumerGroup: hotel-view-sink
+        topic: hotel-price-updates
+        lagThreshold: "100"
+        activationLagThreshold: "0"
+        offsetResetPolicy: earliest
+        allowIdleConsumers: "false"
